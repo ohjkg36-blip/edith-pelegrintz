@@ -1,0 +1,48 @@
+name: Build Godot APK
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Unpack project
+        run: unzip -o ./*.zip
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: android-actions/setup-android@v3
+      - name: Install Android SDK parts
+        run: |
+          yes | sdkmanager --licenses > /dev/null || true
+          sdkmanager "platform-tools" "build-tools;33.0.2" "platforms;android-33"
+      - uses: chickensoft-games/setup-godot@v2
+        with:
+          version: 4.2.2
+          use-dotnet: false
+          include-templates: true
+      - name: Debug keystore
+        run: |
+          keytool -genkey -v -keystore $HOME/debug.keystore -storepass android \
+            -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 \
+            -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
+      - name: Godot editor settings
+        run: |
+          mkdir -p $HOME/.config/godot
+          printf '[gd_resource type="EditorSettings" format=3]\n[resource]\nexport/android/android_sdk_path = "%s"\nexport/android/java_sdk_path = "%s"\n' "$ANDROID_HOME" "$JAVA_HOME" > $HOME/.config/godot/editor_settings-4.tres
+      - name: Export APK
+        env:
+          GODOT_ANDROID_KEYSTORE_DEBUG_USER: androiddebugkey
+          GODOT_ANDROID_KEYSTORE_DEBUG_PASSWORD: android
+        run: |
+          export GODOT_ANDROID_KEYSTORE_DEBUG_PATH=$HOME/debug.keystore
+          mkdir -p build
+          godot --headless --import || true
+          godot --headless --export-debug "Android" build/Edith-Pelegrintz.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Edith-Pelegrintz-APK
+          path: build/Edith-Pelegrintz.apk
